@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: student-grade-app
+  labels:
+    app: student-grade-app
+
+spec:
+  type: {{ .Values.service.type }}
+
+  selector:
+    app: student-grade-app
+
+  ports:
+    - protocol: TCP
+      port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.targetPort }}
