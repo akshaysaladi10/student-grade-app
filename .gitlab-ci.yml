@@ -1,32 +1,78 @@
+
 image: maven:3.9-eclipse-temurin-17
 
 stages:
   - build
   - test
   - package
+  - docker-build
+  - registry
 
 variables:
   MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
+  DOCKER_HOST: "tcp://docker:2375"
+  DOCKER_TLS_CERTDIR: ""
+  DOCKER_DRIVER: overlay2
 
 cache:
   paths:
     - .m2/repository/
 
+# PHASE 1: Compile Java application
 build:
   stage: build
   script:
-    - mvn compile
+    - mvn -B compile
 
+# PHASE 2: Run unit tests
 test:
   stage: test
   script:
-    - mvn test
+    - mvn -B test
 
+# PHASE 3: Package application into JAR
 package:
   stage: package
   script:
-    - mvn package -DskipTests
+    - mvn -B package -DskipTests
+    - ls -lh target/*.jar
   artifacts:
     paths:
       - target/*.jar
-    expire_in: 1 week
+    expire_in: 1 day
+
+# PHASE 4: Build Docker image
+docker-build:
+  stage: docker-build
+  image: docker:27.5.1-cli
+  services:
+    - name: docker:27.5.1-dind
+      alias: docker
+  needs:
+    - job: package
+      artifacts: true
+  script:
+    - docker info
+    - docker build -t student-grade-app:$CI_COMMIT_SHORT_SHA .
+    - docker save -o image.tar student-grade-app:$CI_COMMIT_SHORT_SHA
+  artifacts:
+    paths:
+      - image.tar
+    expire_in: 1 day
+
+# PHASE 5: Push image to GitLab Container Registry
+registry:
+  stage: registry
+  image: docker:27.5.1-cli
+  services:
+    - name: docker:27.5.1-dind
+      alias: docker
+  needs:
+    - job: docker-build
+      artifacts: true
+  script:
+    - docker info
+    - docker load -i image.tar
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - docker tag student-grade-app:$CI_COMMIT_SHORT_SHA "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
+    - docker push "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
