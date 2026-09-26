@@ -1,0 +1,23 @@
+
+image: maven:3.9-eclipse-temurin-17
+
+stages:
+  - build
+
+variables:
+  MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
+
+cache:
+  key: maven-dependencies
+  paths:
+    - .m2/repository/
+
+java_build:
+  stage: build
+  script:
+    - mvn -B clean verify
+  artifacts:
+    when: always
+    paths:
+      - target/*.jar
+    expire_in: 1 week
